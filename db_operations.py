@@ -6,7 +6,19 @@ from config import DB_CONFIG
 def get_db_connection():
     return psycopg2.connect(**DB_CONFIG)
 
+def is_block_fully_synced(block_hash, total_txs):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT COUNT(*) FROM bitcoin_transactions WHERE block_id = %s", (block_hash,))
+        count = cur.fetchone()[0]
+        return count >= total_txs
+    finally:
+        cur.close()
+        conn.close()
+
 def insert_block_header(block):
+
     conn = get_db_connection()
     cur = conn.cursor()
     try:
