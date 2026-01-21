@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Details - Explorer</title>
+    <style>
+        :root {
+            --primary: #f7931a;
+            --bg: #0d1117;
+            --card-bg: #161b22;
+            --text: #c9d1d9;
+            --border: #30363d;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 20px;
+        }
+
+        h1 {
+            color: var(--primary);
+            font-size: 1.5rem;
+            word-break: break-all;
+        }
+
+        .back-link {
+            color: #58a6ff;
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+            display: inline-block;
+        }
+
+        .split-view {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .column {
+            flex: 1;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .column h2 {
+            font-size: 1.1rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .entry {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .address {
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #58a6ff;
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .value {
+            float: right;
+            font-weight: bold;
+            color: #3fb950;
+        }
+
+        .coinbase {
+            color: #d29922;
+            font-style: italic;
+        }
+
+        .tx-meta {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .meta-card {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .label {
+            font-size: 0.7rem;
+            color: #8b949e;
+            text-transform: uppercase;
+        }
+
+        .val {
+            display: block;
+            font-weight: bold;
+            margin-top: 4px;
+        }
+
+        .witness-stack {
+            margin-top: 10px;
+            border-top: 1px dashed var(--border);
+            padding-top: 8px;
+        }
+
+        .witness-item {
+            font-family: monospace;
+            font-size: 0.7rem;
+            color: #8b949e;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 4px;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            word-break: break-all;
+            display: block;
+        }
+
+        .witness-badge {
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            color: var(--primary);
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <a href="/block/{{ tx.block_id }}" class="back-link">← Back to Block</a>
+            <h1>TX: {{ tx.txid }}</h1>
+        </header>
+
+        <div class="tx-meta">
+            <div class="meta-card"><span class="label">Fee</span><span class="val">{{ "{:,}".format(tx.fee) }}
+                    Sats</span></div>
+            <div class="meta-card"><span class="label">Size</span><span class="val">{{ tx.size }} Bytes</span></div>
+            <div class="meta-card"><span class="label">Confirmed In</span><span class="val">#{{ tx.status_block_height
+                    }}</span></div>
+        </div>
+
+        <div class="split-view">
+            <!-- Inputs (Vins) -->
+            <div class="column">
+                <h2>Inputs ({{ vins|length }})</h2>
+                {% for vin in vins %}
+                <div class="entry">
+                    {% if vin.is_coinbase %}
+                    <span class="coinbase">Coinbase (Mined Reward)</span>
+                    {% else %}
+                    <span class="address" title="{{ vin.prevout_address }}">{{ vin.prevout_address or "Unknown Address"
+                        }}</span>
+                    <span class="value">{{ "{:,}".format(vin.prevout_value // 100000000) if vin.prevout_value else "0"
+                        }} BTC</span>
+                    <div style="font-size: 0.7rem; color: #8b949e; margin-top: 5px;">
+                        From: {{ vin.prevout_txid[:10] }}... out #{{ vin.prevout_vout_n }}
+                    </div>
+
+                    {% if witnesses.get(vin.vin_n) %}
+                    <div class="witness-stack">
+                        <span class="witness-badge">⛓️ Witness Pool Data (N-to-N)</span>
+                        {% for item in witnesses.get(vin.vin_n) %}
+                        <span class="witness-item" title="Unique item in witness pool">{{ item }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Arrows -->
+            <div style="display: flex; align-items: center; font-size: 2rem; color: var(--border);">→</div>
+
+            <!-- Outputs (Vouts) -->
+            <div class="column">
+                <h2>Outputs ({{ vouts|length }})</h2>
+                {% for vout in vouts %}
+                <div class="entry">
+                    <span class="address" title="{{ vout.scriptpubkey_address }}">{{ vout.scriptpubkey_address or
+                        "OP_RETURN / Other" }}</span>
+                    <span class="value">{{ "{:,.8f}".format(vout.value / 100000000) }} BTC</span>
+                    <div style="font-size: 0.7rem; color: #8b949e; margin-top: 5px;">Type: {{ vout.scriptpubkey_type }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
