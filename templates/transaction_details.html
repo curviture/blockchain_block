@@ -153,44 +153,53 @@
 <body>
     <div class="container">
         <header>
-            <a href="/block/{{ tx.block_id }}" class="back-link">← Back to Block</a>
+            <a href="/block/{{ tx.block_hash }}" class="back-link">← Back to Block</a>
             <h1>TX: {{ tx.txid }}</h1>
         </header>
 
         <div class="tx-meta">
-            <div class="meta-card"><span class="label">Fee</span><span class="val">{{ "{:,}".format(tx.fee) }}
-                    Sats</span></div>
-            <div class="meta-card"><span class="label">Size</span><span class="val">{{ tx.size }} Bytes</span></div>
-            <div class="meta-card"><span class="label">Confirmed In</span><span class="val">#{{ tx.status_block_height
-                    }}</span></div>
+            <div class="meta-card"><span class="label">Version</span><span class="val">{{ tx.version }}</span></div>
+            <div class="meta-card"><span class="label">Locktime</span><span class="val">{{ tx.locktime }}</span></div>
+            <div class="meta-card"><span class="label">Height</span><span class="val">#{{ tx.block_height }}</span>
+            </div>
         </div>
 
         <div class="split-view">
-            <!-- Inputs (Vins) -->
+            <!-- Inputs -->
             <div class="column">
                 <h2>Inputs ({{ vins|length }})</h2>
                 {% for vin in vins %}
                 <div class="entry">
                     {% if vin.is_coinbase %}
                     <span class="coinbase">Coinbase (Mined Reward)</span>
+                    <div class="witness-stack">
+                        <span class="witness-badge">Script Sig (Hex)</span>
+                        <span class="witness-item">{{ vin.script_sig }}</span>
+                    </div>
                     {% else %}
-                    <span class="address" title="{{ vin.prevout_address }}">{{ vin.prevout_address or "Unknown Address"
-                        }}</span>
-                    <span class="value">{{ "{:,}".format(vin.prevout_value // 100000000) if vin.prevout_value else "0"
-                        }} BTC</span>
+                    <span class="address">Spent from Output #{{ vin.prev_vout }}</span>
                     <div style="font-size: 0.7rem; color: #8b949e; margin-top: 5px;">
-                        From: {{ vin.prevout_txid[:10] }}... out #{{ vin.prevout_vout_n }}
+                        Prev TXID: <span style="font-family: monospace;">{{ vin.prev_txid }}</span>
                     </div>
 
-                    {% if witnesses.get(vin.vin_n) %}
+                    {% if witnesses.get(vin.input_index) %}
                     <div class="witness-stack">
-                        <span class="witness-badge">⛓️ Witness Pool Data (N-to-N)</span>
-                        {% for item in witnesses.get(vin.vin_n) %}
-                        <span class="witness-item" title="Unique item in witness pool">{{ item }}</span>
+                        <span class="witness-badge">⛓️ Witness Data</span>
+                        {% for item in witnesses.get(vin.input_index) %}
+                        <span class="witness-item">{{ item }}</span>
                         {% endfor %}
                     </div>
                     {% endif %}
+
+                    {% if vin.script_sig_asm %}
+                    <div class="witness-stack">
+                        <span class="witness-badge">ScriptSig (ASM)</span>
+                        <span class="witness-item" style="color: #c9d1d9;">{{ vin.script_sig_asm }}</span>
+                    </div>
                     {% endif %}
+                    {% endif %}
+
+                    <div style="font-size: 0.6rem; color: #484f58; margin-top: 8px;">Sequence: {{ vin.sequence }}</div>
                 </div>
                 {% endfor %}
             </div>
@@ -203,16 +212,17 @@
                 <h2>Outputs ({{ vouts|length }})</h2>
                 {% for vout in vouts %}
                 <div class="entry">
-                    <span class="address" title="{{ vout.scriptpubkey_address }}">{{ vout.scriptpubkey_address or
-                        "OP_RETURN / Other" }}</span>
+                    <span class="address" title="{{ vout.address }}">{{ vout.address or "OP_RETURN / Other" }}</span>
                     <span class="value">{{ "{:,.8f}".format(vout.value / 100000000) }} BTC</span>
-                    <div style="font-size: 0.7rem; color: #8b949e; margin-top: 5px;">Type: {{ vout.scriptpubkey_type }}
+                    <div style="font-size: 0.7rem; color: #8b949e; margin-top: 5px;">Type: {{ vout.script_pubkey_type }}
                     </div>
                 </div>
                 {% endfor %}
             </div>
+
         </div>
     </div>
+
 </body>
 
 </html>

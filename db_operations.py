@@ -10,7 +10,7 @@ def is_block_fully_synced(block_hash, total_txs):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT COUNT(*) FROM bitcoin_transactions WHERE block_id = %s", (block_hash,))
+        cur.execute("SELECT COUNT(*) FROM bitcoin_transactions WHERE block_hash = %s", (block_hash,))
         count = cur.fetchone()[0]
         return count >= total_txs
     finally:
@@ -18,85 +18,93 @@ def is_block_fully_synced(block_hash, total_txs):
         conn.close()
 
 def insert_block_header(block):
-
     conn = get_db_connection()
     cur = conn.cursor()
     try:
         cur.execute("""
-            INSERT INTO bitcoin_blocks (id, height, version, timestamp, tx_count, size, weight, merkle_root, difficulty)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING
+            INSERT INTO bitcoin_blocks (
+                block_hash, previous_block_hash, height, version, 
+                merkle_root, timestamp, bits, nonce
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) 
+            ON CONFLICT (block_hash) DO NOTHING
         """, (
-            block['id'], block['height'], block.get('version'),
-            datetime.fromtimestamp(block['timestamp']), block['tx_count'],
-            block['size'], block['weight'], block.get('merkle_root'),
-            block.get('difficulty')
+            block['id'], block.get('previousblockhash'), block['height'], 
+            block.get('version'), block.get('merkle_root'),
+            block['timestamp'], block.get('bits'), block.get('nonce')
         ))
         conn.commit()
     finally:
         cur.close()
         conn.close()
 
-def insert_transaction_batch(transactions, block_hash):
+
+def insert_transaction_batch(transactions, block_hash, base_index=0):
     if not transactions:
         return 0
     
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        for tx in transactions:
-            # 1. Store Transaction Header
+        for i, tx in enumerate(transactions):
+            # Calculate absolute index in the block
+            tx_index = base_index + i
+            
+            # Determine if it's a coinbase transaction
+            is_coinbase = any(vin.get('is_coinbase', False) for vin in tx.get('vin', []))
+            
             status = tx.get('status', {})
-            status_time = datetime.fromtimestamp(status.get('block_time')) if status.get('block_time') else None
 
             cur.execute("""
                 INSERT INTO bitcoin_transactions (
-                    txid, block_id, version, locktime, size, weight, fee,
-                    status_confirmed, status_block_height, status_block_hash, status_block_time
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (txid) DO NOTHING
+                    txid, block_hash, block_height, tx_index, version, locktime, is_coinbase
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (txid) DO NOTHING
             """, (
-                tx['txid'], block_hash, tx.get('version'), tx.get('locktime'),
-                tx.get('size'), tx.get('weight'), tx.get('fee'),
-                status.get('confirmed'), status.get('block_height'), 
-                status.get('block_hash'), status_time
+                tx['txid'], block_hash, status.get('block_height'), tx_index,
+                tx.get('version'), tx.get('locktime'), is_coinbase
             ))
 
-            # 2. Store Vouts
+
+            # 2. Store Outputs
             for n, vout in enumerate(tx.get('vout', [])):
                 cur.execute("""
-                    INSERT INTO bitcoin_vouts (txid, vout_n, value, scriptpubkey_address, scriptpubkey_type)
-                    VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
-                """, (tx['txid'], n, vout.get('value'), vout.get('scriptpubkey_address'), vout.get('scriptpubkey_type')))
-
-            # 3. Store Vins & Witnesses
-            for n, vin in enumerate(tx.get('vin', [])):
-                is_coinbase = vin.get('is_coinbase', False)
-                prevout = vin.get('prevout') or {}
-                cur.execute("""
-                    INSERT INTO bitcoin_vins (txid, vin_n, is_coinbase, prevout_txid, prevout_vout_n, prevout_value, prevout_address)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
+                    INSERT INTO bitcoin_outputs (
+                        txid, output_index, value, script_pubkey, script_pubkey_asm,
+                        script_pubkey_type, address
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
                 """, (
-                    tx['txid'], n, is_coinbase, 
-                    vin.get('txid') if not is_coinbase else None, 
-                    vin.get('vout') if not is_coinbase else None, 
-                    prevout.get('value'), 
-                    prevout.get('scriptpubkey_address')
+                    tx['txid'], n, vout.get('value'), 
+                    vout.get('scriptpubkey'), vout.get('scriptpubkey_asm'),
+                    vout.get('scriptpubkey_type'), vout.get('scriptpubkey_address')
                 ))
 
-                # Handle Witness Correlation (N-to-N)
-                for stack_idx, item in enumerate(vin.get('witness', [])):
-                    w_hash = hashlib.sha256(item.encode('utf-8')).hexdigest()
+
+            # 3. Store Inputs (Level 3)
+            for n, vin in enumerate(tx.get('vin', [])):
+                cur.execute("""
+                    INSERT INTO bitcoin_inputs (
+                        txid, input_index, prev_txid, prev_vout, 
+                        script_sig, script_sig_asm, sequence, is_coinbase
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
+                """, (
+                    tx['txid'], n, 
+                    vin.get('txid'), vin.get('vout'),
+                    vin.get('scriptsig'), vin.get('scriptsig_asm'),
+                    vin.get('sequence'), vin.get('is_coinbase', False)
+                ))
+
+                # 4. Store Witness Data (if present)
+                witness_items = vin.get('witness', [])
+                for witness_idx, witness_data in enumerate(witness_items):
                     cur.execute("""
-                        INSERT INTO bitcoin_witness_pool (witness_hash, witness_data) 
-                        VALUES (%s, %s) ON CONFLICT (witness_hash) DO UPDATE SET witness_hash = EXCLUDED.witness_hash
-                        RETURNING id
-                    """, (w_hash, item))
-                    witness_id = cur.fetchone()[0]
-                    cur.execute("""
-                        INSERT INTO vin_witness_correlation (txid, vin_n, stack_index, witness_id)
-                        VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING
-                    """, (tx['txid'], n, stack_idx, witness_id))
+                        INSERT INTO bitcoin_witnesses (
+                            txid, input_index, witness_index, witness_data
+                        ) VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING
+                    """, (tx['txid'], n, witness_idx, witness_data))
 
         conn.commit()
+
+
         return len(transactions)
     except Exception as e:
         conn.rollback()

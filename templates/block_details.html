@@ -139,35 +139,22 @@
             </div>
             <div style="text-align: right">
                 <span class="stat-label">Confirmed on</span>
-                <span class="stat-value">{{ block.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+                <span class="stat-value">{{ block.timestamp }}</span>
             </div>
+
         </header>
 
-        <div class="block_summary">
-            <div class="stat-card">
-                <span class="stat-label">Hash</span>
-                <span class="stat-value" style="font-family: monospace; font-size: 0.8rem;">{{ block.id }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Transactions</span>
-                <span class="stat-value">{{ block.tx_count }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Total Size</span>
-                <span class="stat-value">{{ "{:,.1f}".format(block.size / 1024) }} KB</span>
-            </div>
-        </div>
-
         <h2>Transactions in this Block</h2>
+
         <div class="table-container">
             <table>
                 <thead>
                     <tr>
                         <th>Transaction ID</th>
-                        <th>Fee (Sats)</th>
-                        <th>Size</th>
-                        <th>Status</th>
-                        <th>Confirmed Time</th>
+                        <th>Index</th>
+                        <th>Version</th>
+                        <th>Locktime</th>
+                        <th>Coinbase</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -175,26 +162,21 @@
                     <tr>
                         <td class="txid"><a href="/tx/{{ tx.txid }}" style="color: inherit; text-decoration: none;">{{
                                 tx.txid }}</a></td>
-                        <td class="fee">{{ "{:,}".format(tx.fee) }}</td>
-                        <td>{{ tx.size }} bytes</td>
+                        <td>{{ tx.tx_index }}</td>
+                        <td>{{ tx.version }}</td>
+                        <td>{{ tx.locktime }}</td>
                         <td>
-                            {% if tx.status_confirmed %}
-                            <span class="status-badge">Confirmed</span>
+                            {% if tx.is_coinbase %}
+                            <span class="status-badge">Yes</span>
                             {% else %}
                             <span class="status-badge"
-                                style="background:rgba(210,153,34,0.15); color:#d29922; border-color:rgba(210,153,34,0.3)">Pending</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if tx.status_block_time %}
-                            {{ tx.status_block_time.strftime('%H:%M:%S') }}
-                            {% else %}
-                            -
+                                style="background:rgba(210,153,34,0.15); color:#d29922; border-color:rgba(210,153,34,0.3)">No</span>
                             {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
+
             </table>
         </div>
     </div>

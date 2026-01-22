@@ -139,25 +139,24 @@
                 <thead>
                     <tr>
                         <th>Height</th>
-                        <th>Block ID (Hash)</th>
-                        <th>Timestamp</th>
-                        <th>Transactions</th>
-                        <th>Size (KB)</th>
-                        <th>Difficulty</th>
+                        <th>Block Hash</th>
+                        <th>Timestamp (Unix)</th>
+                        <th>Version</th>
+                        <th>Bits</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for block in blocks %}
-                    <tr onclick="window.location='/block/{{ block.id }}'">
+                    <tr onclick="window.location='/block/{{ block.block_hash }}'">
                         <td class="height">#{{ block.height }}</td>
-                        <td><span class="hash" title="{{ block.id }}">{{ block.id }}</span></td>
-                        <td class="timestamp">{{ block.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                        <td><span class="badge">{{ "{:,}".format(block.tx_count) }} TXs</span></td>
-                        <td>{{ "{:,.1f}".format(block.size / 1024) }}</td>
-                        <td>{{ "{:,.2e}".format(block.difficulty) }}</td>
+                        <td><span class="hash" title="{{ block.block_hash }}">{{ block.block_hash }}</span></td>
+                        <td class="timestamp">{{ block.timestamp }}</td>
+                        <td><span class="badge">{{ block.version }}</span></td>
+                        <td><code>{{ block.bits }}</code></td>
                     </tr>
                     {% endfor %}
                 </tbody>
+
             </table>
             {% else %}
             <div class="empty-state">

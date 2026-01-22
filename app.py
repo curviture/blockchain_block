@@ -25,11 +25,13 @@ def block_details(block_hash):
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM bitcoin_blocks WHERE id = %s;", (block_hash,))
+        cur.execute("SELECT * FROM bitcoin_blocks WHERE block_hash = %s;", (block_hash,))
         block = cur.fetchone()
         if not block: abort(404)
+
         
-        cur.execute("SELECT * FROM bitcoin_transactions WHERE block_id = %s ORDER BY fee DESC;", (block_hash,))
+        cur.execute("SELECT * FROM bitcoin_transactions WHERE block_hash = %s ORDER BY tx_index ASC;", (block_hash,))
+
         transactions = cur.fetchall()
         cur.close(); conn.close()
         return render_template('block_details.html', block=block, transactions=transactions)
@@ -48,33 +50,35 @@ def transaction_details(txid):
         tx = cur.fetchone()
         if not tx: abort(404)
         
-        # 2. Fetch Vouts (Outputs)
-        cur.execute("SELECT * FROM bitcoin_vouts WHERE txid = %s ORDER BY vout_n;", (txid,))
+        # 2. Fetch Outputs
+        cur.execute("SELECT * FROM bitcoin_outputs WHERE txid = %s ORDER BY output_index;", (txid,))
         vouts = cur.fetchall()
+
         
-        # 3. Fetch Vins (Inputs)
-        cur.execute("SELECT * FROM bitcoin_vins WHERE txid = %s ORDER BY vin_n;", (txid,))
+        # 3. Fetch Inputs
+        cur.execute("SELECT * FROM bitcoin_inputs WHERE txid = %s ORDER BY input_index;", (txid,))
         vins = cur.fetchall()
 
-        # 4. Fetch Witness Items (The N-to-N Correlation)
+        # 4. Fetch Witnesses
         cur.execute("""
-            SELECT c.vin_n, p.witness_data, c.stack_index
-            FROM vin_witness_correlation c
-            JOIN bitcoin_witness_pool p ON c.witness_id = p.id
-            WHERE c.txid = %s
-            ORDER BY c.vin_n, c.stack_index;
+            SELECT input_index, witness_index, witness_data 
+            FROM bitcoin_witnesses 
+            WHERE txid = %s 
+            ORDER BY input_index, witness_index
         """, (txid,))
         witness_rows = cur.fetchall()
         
-        # Group witnesses by vin_n for easy access in template
+        # Group witnesses by input_index
         witnesses = {}
         for row in witness_rows:
-            if row['vin_n'] not in witnesses:
-                witnesses[row['vin_n']] = []
-            witnesses[row['vin_n']].append(row['witness_data'])
+            if row['input_index'] not in witnesses:
+                witnesses[row['input_index']] = []
+            witnesses[row['input_index']].append(row['witness_data'])
         
         cur.close(); conn.close()
         return render_template('transaction_details.html', tx=tx, vouts=vouts, vins=vins, witnesses=witnesses)
+
+
     except Exception as e:
         return str(e), 500
 
